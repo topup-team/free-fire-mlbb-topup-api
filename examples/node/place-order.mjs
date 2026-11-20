@@ -1,5 +1,7 @@
 // Place a TopUpKit order and wait until it settles.
 // Usage: TOPUPKIT_API_KEY=your_key node place-order.mjs <item> <playerId> [serverId]
+// To resend an order after a crash, run again with TOPUPKIT_IDEMPOTENCY_KEY set
+// to the key this script printed: you get the first order back, never a second one.
 // Node 18+ (built-in fetch). No dependencies.
 import { randomUUID } from "node:crypto";
 
@@ -12,18 +14,34 @@ if (!KEY || !item || !playerId) {
   process.exit(1);
 }
 
+// Retries network errors and timeouts only. Safe for the POST because every
+// try sends the same Idempotency-Key, so the server never pays twice.
 async function call(path, init = {}) {
-  const res = await fetch(BASE + path, {
-    ...init,
-    headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", ...init.headers },
-  });
-  const body = await res.json();
-  if (!body.ok) throw new Error(`${res.status} ${body.error.code}: ${body.error.message}`);
-  return body.data;
+  for (let attempt = 1; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(BASE + path, {
+        ...init,
+        signal: AbortSignal.timeout(30_000),
+        headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", ...init.headers },
+      });
+    } catch (error) {
+      if (attempt === 3) throw error;
+      console.error(`Network error, retrying (${attempt}/3): ${error.message}`);
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      continue;
+    }
+    if (!res.headers.get("content-type")?.includes("application/json")) {
+      throw new Error(`Server answered ${res.status} without JSON`);
+    }
+    const body = await res.json();
+    if (!body.ok) throw new Error(`${res.status} ${body.error.code}: ${body.error.message}`);
+    return body.data;
+  }
 }
 
-// Keep this key with your own order. Resending it never pays twice.
-const idempotencyKey = randomUUID();
+const idempotencyKey = process.env.TOPUPKIT_IDEMPOTENCY_KEY ?? randomUUID();
+console.log(`Idempotency-Key: ${idempotencyKey}`);
 
 let order = await call("/api/orders", {
   method: "POST",

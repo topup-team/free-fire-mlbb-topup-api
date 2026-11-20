@@ -6,12 +6,15 @@ import { createServer } from "node:http";
 
 const SECRET = process.env.TOPUPKIT_SIGNING_SECRET;
 const PORT = Number(process.env.PORT ?? 8080);
+const MAX_BODY_BYTES = 64 * 1024; // a callback is about 1 KB
 const seen = new Set(); // use your database in production
 
+/** rawBody: the request body exactly as received (Buffer or string). */
 export function verify(headers, rawBody, secret, now = Date.now() / 1000) {
   const timestamp = headers["x-callback-timestamp"];
   const expected = Buffer.from(
-    "sha256=" + createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex"),
+    "sha256=" +
+      createHmac("sha256", secret).update(`${timestamp}.`).update(rawBody).digest("hex"),
   );
   const received = Buffer.from(headers["x-callback-signature"] ?? "");
   return (
@@ -28,15 +31,26 @@ if (process.argv[1]?.endsWith("callback-server.mjs")) {
     process.exit(1);
   }
   createServer((req, res) => {
-    let rawBody = "";
-    req.on("data", (chunk) => (rawBody += chunk));
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        res.writeHead(413, { Connection: "close" }).end();
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => {
-      // Verify the exact bytes received, before JSON.parse.
+      // Keep the bytes as bytes until verified: decoding chunk by chunk
+      // would break multi-byte characters such as Khmer nicknames.
+      const rawBody = Buffer.concat(chunks);
       if (!verify(req.headers, rawBody, SECRET)) {
         res.writeHead(401).end();
         return;
       }
-      const order = JSON.parse(rawBody);
+      const order = JSON.parse(rawBody.toString("utf8"));
       if (req.headers["x-callback-event"] === "test") {
         console.log("Test callback received");
       } else if (!seen.has(order.id)) {

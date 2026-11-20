@@ -1,7 +1,9 @@
 """Place a TopUpKit order and wait until it settles.
 
 Usage: TOPUPKIT_API_KEY=your_key python place_order.py <item> <playerId> [serverId]
-Python 3.8+, standard library only.
+To resend an order after a crash, run again with TOPUPKIT_IDEMPOTENCY_KEY set
+to the key this script printed: you get the first order back, never a second one.
+Python 3.9+, standard library only.
 """
 import json
 import os
@@ -16,6 +18,8 @@ KEY = os.environ.get("TOPUPKIT_API_KEY")
 
 
 def call(path, method="GET", body=None, headers=None):
+    """Retries network errors and timeouts only. Safe for the POST because every
+    try sends the same Idempotency-Key, so the server never pays twice."""
     req = urllib.request.Request(
         BASE + path,
         method=method,
@@ -26,14 +30,24 @@ def call(path, method="GET", body=None, headers=None):
             **(headers or {}),
         },
     )
-    try:
-        with urllib.request.urlopen(req) as res:
+    for attempt in range(1, 4):
+        try:
+            res = urllib.request.urlopen(req, timeout=30)
+        except urllib.error.HTTPError as e:
+            res = e  # 4xx/5xx still carry a JSON body
+        except OSError as e:  # URLError, socket timeout, connection reset
+            if attempt == 3:
+                raise
+            print(f"Network error, retrying ({attempt}/3): {e}", file=sys.stderr)
+            time.sleep(2 * attempt)
+            continue
+        with res:
+            if "application/json" not in (res.headers.get("Content-Type") or ""):
+                raise RuntimeError(f"Server answered {res.status} without JSON")
             payload = json.load(res)
-    except urllib.error.HTTPError as e:
-        payload = json.load(e)
-    if not payload["ok"]:
-        raise RuntimeError(f"{payload['error']['code']}: {payload['error']['message']}")
-    return payload["data"]
+        if not payload["ok"]:
+            raise RuntimeError(f"{payload['error']['code']}: {payload['error']['message']}")
+        return payload["data"]
 
 
 def main():
@@ -44,8 +58,10 @@ def main():
     if len(sys.argv) > 3:
         body["serverId"] = sys.argv[3]
 
-    # Keep this key with your own order. Resending it never pays twice.
-    order = call("/api/orders", "POST", body, {"Idempotency-Key": str(uuid.uuid4())})
+    idempotency_key = os.environ.get("TOPUPKIT_IDEMPOTENCY_KEY") or str(uuid.uuid4())
+    print(f"Idempotency-Key: {idempotency_key}")
+
+    order = call("/api/orders", "POST", body, {"Idempotency-Key": idempotency_key})
     print(f"Order {order['id']} is {order['status']}")
 
     while order["status"] == "pending":

@@ -135,11 +135,14 @@ See [examples/node/callback-server.mjs](examples/node/callback-server.mjs).
 | ---- | ----- |
 | [examples/node/place-order.mjs](examples/node/place-order.mjs) | Place an order and poll until it settles (Node 18+, no dependencies) |
 | [examples/node/callback-server.mjs](examples/node/callback-server.mjs) | Receive and verify signed callbacks |
-| [examples/python/place_order.py](examples/python/place_order.py) | Place an order and poll (Python 3, standard library only) |
+| [examples/python/place_order.py](examples/python/place_order.py) | Place an order and poll (Python 3.9+, standard library only) |
+| [examples/node/callback-server.test.mjs](examples/node/callback-server.test.mjs) | Tests for the signature check: `node --test` |
 
 ```bash
 TOPUPKIT_API_KEY=your_key node examples/node/place-order.mjs freefire-KH-100 123456789
 ```
+
+Both order scripts retry network errors with the same `Idempotency-Key` and print it first. If a script crashes, run it again with `TOPUPKIT_IDEMPOTENCY_KEY=<printed key>`: you get the first order back, and nothing is paid twice.
 
 ## FAQ
 
