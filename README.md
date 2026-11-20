@@ -1,9 +1,15 @@
+![TopUpKit API: Free Fire and MLBB diamond top up API](assets/banner.png)
+
 # TopUpKit API: Free Fire & MLBB Diamond Top Up API
 
 **REST API to top up Free Fire diamonds (Garena) and Mobile Legends (MLBB), Magic Chess: Go Go and Blood Strike diamonds (Smile One) automatically.**
 Place diamond orders from your own top-up shop, Telegram bot, WhatsApp bot or reseller website with one HTTP call. Each order is paid by your own Garena Shell or Smile Coin account.
 
 [Website](https://topupkit.com) · [Full API documentation](https://topupkit.com/en/api-docs) · [Examples](examples/) · [FAQ](#faq)
+
+![How a Free Fire diamond top up works through the TopUpKit API: place the order, get pending, receive a signed success callback](assets/api-demo.gif)
+
+▶ **[Watch the full API walkthrough on YouTube (2 min)](https://youtu.be/IVH_Sp11gVI)**
 
 **Keywords:** Free Fire top up API, Free Fire diamond API, Garena top up API, Garena Shell, MLBB diamond API, Mobile Legends top up API, Smile One API, SmileOne API, Smile Coin, Magic Chess Go Go top up, Blood Strike top up, game top up API, diamond reseller API, top up bot, PPOB.
 
